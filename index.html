@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markify — MD to DOCX Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --bg: #0B0F1A;
+            --card: rgba(15, 23, 42, 0.75);
+            --border: rgba(148, 163, 184, 0.12);
+            --fg: #E2E8F0;
+            --muted: #94A3B8;
+            --accent: #10B981;
+            --accent-glow: rgba(16, 185, 129, 0.25);
+            --gold: #F59E0B;
+            --gold-glow: rgba(245, 158, 11, 0.2);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated background blobs */
+        .blob {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .blob-1 {
+            width: 500px; height: 500px;
+            background: var(--accent);
+            opacity: 0.08;
+            top: -100px; left: -100px;
+            animation: drift1 25s ease-in-out infinite;
+        }
+        .blob-2 {
+            width: 400px; height: 400px;
+            background: var(--gold);
+            opacity: 0.06;
+            bottom: -50px; right: -80px;
+            animation: drift2 30s ease-in-out infinite;
+        }
+        .blob-3 {
+            width: 350px; height: 350px;
+            background: #6366F1;
+            opacity: 0.05;
+            top: 40%; left: 50%;
+            animation: drift3 22s ease-in-out infinite;
+        }
+        @keyframes drift1 {
+            0%,100% { transform: translate(0,0) scale(1); }
+            33% { transform: translate(80px,60px) scale(1.15); }
+            66% { transform: translate(-40px,100px) scale(0.9); }
+        }
+        @keyframes drift2 {
+            0%,100% { transform: translate(0,0) scale(1); }
+            33% { transform: translate(-60px,-80px) scale(1.1); }
+            66% { transform: translate(50px,-30px) scale(0.95); }
+        }
+        @keyframes drift3 {
+            0%,100% { transform: translate(0,0) scale(1); }
+            50% { transform: translate(-70px,50px) scale(1.2); }
+        }
+
+        /* Subtle grid overlay */
+        .grid-overlay {
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background-image:
+                linear-gradient(rgba(148,163,184,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148,163,184,0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+        }
+
+        .main-container { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+        /* Glass card */
+        .glass {
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+
+        /* Drop zone */
+        .drop-zone {
+            border: 2px dashed rgba(148,163,184,0.25);
+            border-radius: 20px;
+            padding: 4rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4,0,0.2,1);
+            position: relative;
+            overflow: hidden;
+        }
+        .drop-zone::before {
+            content: '';
+            position: absolute; inset: 0;
+            background: radial-gradient(circle at center, var(--accent-glow) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: var(--accent);
+            transform: scale(1.01);
+        }
+        .drop-zone:hover::before, .drop-zone.drag-over::before { opacity: 1; }
+
+        .drop-icon {
+            font-size: 3rem;
+            color: var(--muted);
+            margin-bottom: 1rem;
+            transition: all 0.4s;
+        }
+        .drop-zone:hover .drop-icon { color: var(--accent); transform: translateY(-4px); }
+
+        /* Buttons */
+        .btn-primary {
+            background: linear-gradient(135deg, #10B981, #059669);
+            color: white;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            font-size: 1.05rem;
+            padding: 0.9rem 2.5rem;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px var(--accent-glow);
+        }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--muted);
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 500;
+            font-size: 0.95rem;
+            padding: 0.7rem 1.5rem;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-secondary:hover { color: var(--fg); border-color: var(--muted); }
+
+        /* Markdown preview styling (matches DOCX output) */
+        .md-preview {
+            background: #FFFFFF;
+            color: #2D3436;
+            font-family: 'Calibri', 'Segoe UI', sans-serif;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            padding: 2rem;
+            border-radius: 12px;
+            max-height: 480px;
+            overflow-y: auto;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+        }
+        .md-preview::-webkit-scrollbar { width: 6px; }
+        .md-preview::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+        .md-preview::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+        .md-preview h1 { color: #1B2A4A; font-family: 'Cambria', Georgia, serif; font-size: 1.8rem; font-weight: 700; margin: 1.2rem 0 0.6rem; border-bottom: 3px solid #0D7377; padding-bottom: 0.4rem; }
+        .md-preview h2 { color: #0D7377; font-family: 'Cambria', Georgia, serif; font-size: 1.45rem; font-weight: 700; margin: 1rem 0 0.5rem; }
+        .md-preview h3 { color: #2E86AB; font-family: 'Cambria', Georgia, serif; font-size: 1.2rem; font-weight: 600; margin: 0.8rem 0 0.4rem; }
+        .md-preview h4 { color: #5C6BC0; font-size: 1.05rem; font-weight: 600; margin: 0.7rem 0 0.3rem; }
+        .md-preview h5 { color: #7E57C2; font-size: 0.95rem; font-weight: 600; margin: 0.6rem 0 0.3rem; }
+        .md-preview h6 { color: #AB47BC; font-size: 0.88rem; font-weight: 600; margin: 0.5rem 0 0.2rem; }
+        .md-preview p { margin: 0.5rem 0; }
+        .md-preview strong { color: #1A1A2E; }
+        .md-preview a { color: #00838F; text-decoration: underline; }
+        .md-preview code {
+            background: #FFF3E0; color: #E65100;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.85em; padding: 2px 6px; border-radius: 4px;
+        }
+        .md-preview pre {
+            background: #F0F4F8; color: #C62828;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.85rem; padding: 1rem 1.2rem;
+            border-radius: 8px; overflow-x: auto; margin: 0.8rem 0;
+            border-left: 4px solid #0D7377;
+        }
+        .md-preview pre code { background: none; color: inherit; padding: 0; }
+        .md-preview blockquote {
+            border-left: 4px solid #00897B; padding: 0.5rem 1rem;
+            margin: 0.8rem 0; color: #546E7A; font-style: italic;
+            background: #F0FAFA; border-radius: 0 6px 6px 0;
+        }
+        .md-preview ul, .md-preview ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+        .md-preview li { margin: 0.25rem 0; }
+        .md-preview ul li::marker { color: #0D7377; }
+        .md-preview ol li::marker { color: #0D7377; font-weight: 600; }
+        .md-preview table { width: 100%; border-collapse: collapse; margin: 0.8rem 0; font-size: 0.88rem; }
+        .md-preview th { background: #1B2A4A; color: #FFFFFF; padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; }
+        .md-preview td { padding: 0.45rem 0.75rem; border-bottom: 1px solid #E2E8F0; }
+        .md-preview tr:nth-child(even) td { background: #F5F7FA; }
+        .md-preview hr { border: none; border-top: 2px solid #0D7377; margin: 1.2rem 0; }
+        .md-preview del { text-decoration: line-through; color: #999; }
+        .md-preview img { max-width: 100%; border-radius: 6px; }
+
+        /* Section transitions */
+        .section-hidden { display: none; }
+        .section-visible {
+            display: block;
+            animation: fadeSlideIn 0.5s cubic-bezier(0.4,0,0.2,1) forwards;
+        }
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Toast */
+        .toast-container {
+            position: fixed; top: 1.5rem; right: 1.5rem; z-index: 1000;
+            display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            padding: 0.8rem 1.2rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            backdrop-filter: blur(12px);
+            animation: toastIn 0.4s ease forwards;
+            max-width: 360px;
+        }
+        .toast-error { background: rgba(239,68,68,0.9); color: white; }
+        .toast-success { background: rgba(16,185,129,0.9); color: white; }
+        .toast-info { background: rgba(59,130,246,0.9); color: white; }
+        .toast-out { animation: toastOut 0.3s ease forwards; }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(40px); } }
+
+        /* Loading spinner */
+        .spinner {
+            width: 20px; height: 20px;
+            border: 2.5px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Success checkmark */
+        .check-circle {
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #10B981, #059669);
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 1.5rem;
+            animation: popIn 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards;
+        }
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .check-circle i { font-size: 2rem; color: white; animation: checkDraw 0.3s 0.3s ease both; }
+        @keyframes checkDraw { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+
+        /* Stat item */
+        .stat-item {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.55rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .stat-item:last-child { border-bottom: none; }
+        .stat-icon { width: 28px; text-align: center; font-size: 0.85rem; }
+
+        /* Color swatch */
+        .color-swatch {
+            width: 14px; height: 14px; border-radius: 3px;
+            display: inline-block; flex-shrink: 0;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .preview-grid { flex-direction: column !important; }
+            .md-preview { max-height: 350px; }
+            .drop-zone { padding: 2.5rem 1.5rem; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .blob, .drop-zone, .btn-primary, .toast, .check-circle, .check-circle i {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Background effects -->
+    <div class="blob blob-1" aria-hidden="true"></div>
+    <div class="blob blob-2" aria-hidden="true"></div>
+    <div class="blob blob-3" aria-hidden="true"></div>
+    <div class="grid-overlay" aria-hidden="true"></div>
+
+    <div class="main-container">
+        <!-- Header -->
+        <header class="text-center mb-10 pt-4">
+            <div class="inline-flex items-center gap-3 mb-3">
+                <div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#10B981,#059669);display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-file-word text-white text-lg"></i>
+                </div>
+                <h1 class="text-3xl font-bold tracking-tight" style="font-family:'Space Grotesk',sans-serif;">Markify</h1>
+            </div>
+            <p style="color:var(--muted);font-size:1.05rem;font-weight:300;letter-spacing:0.02em;">
+                Professional Markdown to Word Document Conversion
+            </p>
+        </header>
+
+        <!-- Section 1: Upload -->
+        <section id="section-upload" class="section-visible">
+            <div class="drop-zone glass" id="drop-zone" role="button" tabindex="0" aria-label="Upload a Markdown file">
+                <div class="drop-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                <p style="font-size:1.15rem;font-weight:600;margin-bottom:0.4rem;position:relative;">Drag & drop your .md file here</p>
+                <p style="color:var(--muted);font-size:0.9rem;position:relative;">or click to browse your files</p>
+                <div style="margin-top:1.2rem;display:inline-flex;align-items:center;gap:0.5rem;padding:0.4rem 1rem;border-radius:8px;background:rgba(148,163,184,0.08);font-size:0.8rem;color:var(--muted);position:relative;">
+                    <i class="fa-solid fa-circle-info" style="font-size:0.75rem;"></i>
+                    Supports .md files up to 10 MB
+                </div>
+                <input type="file" id="file-input" accept=".md,.markdown,.txt" hidden>
+            </div>
+        </section>
+
+        <!-- Section 2: Preview -->
+        <section id="section-preview" class="section-hidden">
+            <!-- File info bar -->
+            <div class="glass flex items-center justify-between px-5 py-3 mb-5" style="border-radius:12px;">
+                <div class="flex items-center gap-3">
+                    <div style="width:36px;height:36px;border-radius:8px;background:rgba(16,185,129,0.15);display:flex;align-items:center;justify-content:center;">
+                        <i class="fa-brands fa-markdown" style="color:var(--accent);font-size:1rem;"></i>
+                    </div>
+                    <div>
+                        <p id="file-name" style="font-weight:600;font-size:0.95rem;line-height:1.2;"></p>
+                        <p id="file-size" style="color:var(--muted);font-size:0.8rem;"></p>
+                    </div>
+                </div>
+                <button class="btn-secondary" id="btn-clear" style="padding:0.4rem 0.8rem;font-size:0.85rem;" aria-label="Remove file">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Preview grid -->
+            <div class="preview-grid flex gap-5 mb-5" style="align-items:flex-start;">
+                <!-- Left: Markdown preview -->
+                <div class="flex-1 min-w-0">
+                    <p style="font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem;">
+                        <i class="fa-solid fa-eye" style="margin-right:0.4rem;"></i> Live Preview
+                    </p>
+                    <div class="md-preview" id="md-preview" role="document" aria-label="Markdown preview"></div>
+                </div>
+                <!-- Right: Analysis -->
+                <div style="width:260px;flex-shrink:0;" class="hidden md:block">
+                    <p style="font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.6rem;">
+                        <i class="fa-solid fa-chart-pie" style="margin-right:0.4rem;"></i> Document Analysis
+                    </p>
+                    <div class="glass" style="padding:1rem 1.2rem;border-radius:12px;">
+                        <div id="doc-stats"></div>
+                    </div>
+
+                    <p style="font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin:1.2rem 0 0.6rem;">
+                        <i class="fa-solid fa-palette" style="margin-right:0.4rem;"></i> Output Palette
+                    </p>
+                    <div class="glass" style="padding:1rem 1.2rem;border-radius:12px;" id="palette-display"></div>
+                </div>
+            </div>
+
+            <!-- Convert button -->
+            <button class="btn-primary w-full" id="btn-convert" style="font-size:1.1rem;padding:1rem;">
+                <i class="fa-solid fa-wand-magic-sparkles" style="margin-right:0.5rem;"></i>
+                Convert to DOCX
+            </button>
+        </section>
+
+        <!-- Section 3: Result -->
+        <section id="section-result" class="section-hidden">
+            <div class="glass text-center" style="padding:3rem 2rem;border-radius:20px;">
+                <div class="check-circle">
+                    <i class="fa-solid fa-check"></i>
+                </div>
+                <h2 style="font-size:1.5rem;font-weight:700;margin-bottom:0.4rem;">Conversion Complete</h2>
+                <p style="color:var(--muted);font-size:0.95rem;margin-bottom:0.3rem;" id="result-filename"></p>
+                <p style="color:var(--muted);font-size:0.85rem;margin-bottom:2rem;" id="result-filesize"></p>
+                <button class="btn-primary" id="btn-download" style="padding:1rem 3rem;font-size:1.1rem;">
+                    <i class="fa-solid fa-download" style="margin-right:0.5rem;"></i>
+                    Download .docx
+                </button>
+                <div style="margin-top:1.2rem;">
+                    <button class="btn-secondary" id="btn-another">
+                        <i class="fa-solid fa-arrow-rotate-left" style="margin-right:0.4rem;"></i>
+                        Convert Another File
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+    <script>
+        /* =========================================================
+           CONSTANTS — DOCX output color palette & typography
+           ========================================================= */
+        const COLORS = {
+            h1: '1B2A4A', h2: '0D7377', h3: '2E86AB',
+            h4: '5C6BC0', h5: '7E57C2', h6: 'AB47BC',
+            body: '2D3436', strong: '1A1A2E',
+            codeBg: 'F0F4F8', codeText: 'C62828',
+            inlineBg: 'FFF3E0', inlineText: 'E65100',
+            link: '00838F',
+            quoteBorder: '00897B', quoteText: '546E7A',
+            tableHeaderBg: '1B2A4A', tableHeaderText: 'FFFFFF',
+            tableRow1: 'FFFFFF', tableRow2: 'F5F7FA',
+            bullet: '0D7377', hr: '0D7377',
+            headerText: '999999', footerText: '999999'
+        };
+
+        const HEADING_SIZES = [52, 44, 36, 32, 28, 24]; // half-points (26pt down to 12pt)
+        const BODY_SIZE = 22; // 11pt
+        const CODE_SIZE = 20; // 10pt
+
+        /* =========================================================
+           STATE
+           ========================================================= */
+        let currentFile = null;
+        let currentMarkdown = '';
+        let currentTokens = [];
+        let outputBlob = null;
+
+        /* =========================================================
+           DOM REFS
+           ========================================================= */
+        const $ = id => document.getElementById(id);
+        const dropZone = $('drop-zone');
+        const fileInput = $('file-input');
+        const sectionUpload = $('section-upload');
+        const sectionPreview = $('section-preview');
+        const sectionResult = $('section-result');
+        const fileNameEl = $('file-name');
+        const fileSizeEl = $('file-size');
+        const mdPreview = $('md-preview');
+        const docStats = $('doc-stats');
+        const paletteDisplay = $('palette-display');
+        const btnClear = $('btn-clear');
+        const btnConvert = $('btn-convert');
+        const btnDownload = $('btn-download');
+        const btnAnother = $('btn-another');
+        const resultFilename = $('result-filename');
+        const resultFilesize = $('result-filesize');
+
+        /* =========================================================
+           UTILITY FUNCTIONS
+           ========================================================= */
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(2) + ' MB';
+        }
+
+        function showSection(section) {
+            [sectionUpload, sectionPreview, sectionResult].forEach(s => {
+                s.classList.remove('section-visible');
+                s.classList.add('section-hidden');
+            });
+            section.classList.remove('section-hidden');
+            section.classList.add('section-visible');
+        }
+
+        function showToast(message, type = 'info') {
+            const container = $('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('toast-out');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        /* =========================================================
+           FILE HANDLING
+           ========================================================= */
+        // Click to browse
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+
+        // Drag & drop events
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            const file = e.dataTransfer.files[0];
+            if (file) handleFile(file);
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files[0]) handleFile(fileInput.files[0]);
+            fileInput.value = '';
+        });
+
+        function handleFile(file) {
+            // Validate extension
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!['md', 'markdown', 'txt'].includes(ext)) {
+                showToast('Please upload a .md or .markdown file.', 'error');
+                return;
+            }
+            // Validate size (10 MB max)
+            if (file.size > 10 * 1024 * 1024) {
+                showToast('File too large. Maximum size is 10 MB.', 'error');
+                return;
+            }
+
+            currentFile = file;
+            const reader = new FileReader();
+            reader.onload = e => {
+                currentMarkdown = e.target.result;
+                if (!currentMarkdown.trim()) {
+                    showToast('The file appears to be empty.', 'error');
+                    return;
+                }
+                preparePreview();
+            };
+            reader.onerror = () => showToast('Failed to read the file.', 'error');
+            reader.readAsText(file);
+        }
+
+        /* =========================================================
+           PREVIEW & ANALYSIS
+           ========================================================= */
+        function preparePreview() {
+            // Parse tokens
+            currentTokens = marked.lexer(currentMarkdown, { gfm: true });
+
+            // File info
+            fileNameEl.textContent = currentFile.name;
+            fileSizeEl.textContent = formatBytes(currentFile.size) + ' · ' + currentMarkdown.split('\n').length + ' lines';
+
+            // Render styled HTML preview
+            mdPreview.innerHTML = marked.parse(currentMarkdown, { gfm: true });
+
+            // Analyze document structure
+            analyzeDocument();
+
+            // Show palette
+            renderPalette();
+
+            // Switch to preview section
+            showSection(sectionPreview);
+        }
+
+        function analyzeDocument() {
+            const stats = { headings: 0, paragraphs: 0, codeBlocks: 0, tables: 0, lists: 0, listItems: 0, blockquotes: 0, links: 0, images: 0, hr: 0 };
+
+            function countTokens(tokens) {
+                for (const t of tokens) {
+                    switch (t.type) {
+                        case 'heading': stats.headings++; countTokens(t.tokens || []); break;
+                        case 'paragraph': stats.paragraphs++; countTokens(t.tokens || []); break;
+                        case 'code': stats.codeBlocks++; break;
+                        case 'table': stats.tables++; break;
+                        case 'list': stats.lists++; countListItems(t.items); break;
+                        case 'blockquote': stats.blockquotes++; countTokens(t.tokens || []); break;
+                        case 'hr': stats.hr++; break;
+                        case 'text': break;
+                    }
+                }
+                // Count inline elements
+                for (const t of tokens) {
+                    if (t.tokens) countInline(t.tokens, stats);
+                }
+            }
+
+            function countInline(tokens, s) {
+                for (const t of tokens) {
+                    if (t.type === 'link') s.links++;
+                    if (t.type === 'image') s.images++;
+                    if (t.tokens) countInline(t.tokens, s);
+                }
+            }
+
+            function countListItems(items) {
+                for (const item of items) {
+                    stats.listItems++;
+                    if (item.tokens) {
+                        for (const t of item.tokens) {
+                            if (t.type === 'list') countListItems(t.items);
+                            if (t.tokens) countInline(t.tokens, stats);
+                        }
+                    }
+                }
+            }
+
+            countTokens(currentTokens);
+
+            const items = [
+                { icon: 'fa-heading', color: '#1B2A4A', label: 'Headings', value: stats.headings },
+                { icon: 'fa-paragraph', color: '#2D3436', label: 'Paragraphs', value: stats.paragraphs },
+                { icon: 'fa-code', color: '#C62828', label: 'Code Blocks', value: stats.codeBlocks },
+                { icon: 'fa-table', color: '#0D7377', label: 'Tables', value: stats.tables },
+                { icon: 'fa-list', color: '#2E86AB', label: `Lists (${stats.listItems} items)`, value: stats.lists },
+                { icon: 'fa-quote-left', color: '#00897B', label: 'Blockquotes', value: stats.blockquotes },
+                { icon: 'fa-link', color: '#00838F', label: 'Links', value: stats.links },
+                { icon: 'fa-image', color: '#5C6BC0', label: 'Images', value: stats.images },
+                { icon: 'fa-minus', color: '#0D7377', label: 'Horizontal Rules', value: stats.hr },
+            ].filter(i => i.value > 0);
+
+            docStats.innerHTML = items.length
+                ? items.map(i => `
+                    <div class="stat-item">
+                        <div class="stat-icon"><i class="fa-solid ${i.icon}" style="color:${i.color};"></i></div>
+                        <span style="flex:1;font-size:0.88rem;">${i.label}</span>
+                        <span style="font-weight:700;font-size:0.9rem;color:${i.color};">${i.value}</span>
+                    </div>`).join('')
+                : '<p style="color:var(--muted);font-size:0.88rem;padding:0.5rem 0;">No structured elements detected.</p>';
+        }
+
+        function renderPalette() {
+            const swatches = [
+                { label: 'H1', color: COLORS.h1 },
+                { label: 'H2', color: COLORS.h2 },
+                { label: 'H3', color: COLORS.h3 },
+                { label: 'H4', color: COLORS.h4 },
+                { label: 'H5', color: COLORS.h5 },
+                { label: 'H6', color: COLORS.h6 },
+                { label: 'Body', color: COLORS.body },
+                { label: 'Link', color: COLORS.link },
+                { label: 'Code', color: COLORS.codeText },
+                { label: 'Quote', color: COLORS.quoteBorder },
+            ];
+            paletteDisplay.innerHTML = `
+                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
+                    ${swatches.map(s => `
+                        <div style="text-align:center;">
+                            <div class="color-swatch" style="background:#${s.color};margin:0 auto 3px;"></div>
+                            <span style="font-size:0.7rem;color:var(--muted);">${s.label}</span>
+                        </div>`).join('')}
+                </div>
+                <div style="margin-top:0.8rem;font-size:0.75rem;color:var(--muted);line-height:1.5;">
+                    <strong style="color:var(--fg);">Fonts:</strong> Cambria (headings), Calibri (body), Consolas (code)
+                </div>`;
+        }
+
+        /* =========================================================
+           DOCX GENERATION — Core conversion engine
+           ========================================================= */
+
+        // Lazy-load the docx library on demand
+        function loadDocxLibrary() {
+            return new Promise((resolve, reject) => {
+                if (window.docx) { resolve(); return; }
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/docx@8.5.0/build/index.umd.js';
+                script.onload = resolve;
+                script.onerror = () => reject(new Error('Failed to load DOCX library. Check your internet connection.'));
+                document.head.appendChild(script);
+            });
+        }
+
+        /**
+         * Process inline markdown tokens into docx TextRun array.
+         * @param {Array} tokens - Inline tokens from marked lexer
+         * @param {Object} overrides - Style overrides to apply (bold, italics, color, etc.)
+         * @returns {Array} Array of docx.TextRun
+         */
+        function processInlineTokens(tokens, overrides = {}) {
+            if (!tokens || !tokens.length) return [];
+            const runs = [];
+            const baseRun = { font: 'Calibri', size: BODY_SIZE, color: COLORS.body, ...overrides };
+
+            for (const token of tokens) {
+                switch (token.type) {
+                    case 'text': {
+                        if (token.text) {
+                            runs.push(new docx.TextRun({ ...baseRun, text: token.text }));
+                        }
+                        break;
+                    }
+                    case 'strong': {
+                        runs.push(...processInlineTokens(token.tokens, { ...overrides, bold: true, color: overrides.color || COLORS.strong }));
+                        break;
+                    }
+                    case 'em': {
+                        runs.push(...processInlineTokens(token.tokens, { ...overrides, italics: true }));
+                        break;
+                    }
+                    case 'codespan': {
+                        if (token.text) {
+                            runs.push(new docx.TextRun({
+                                text: token.text,
+                                font: 'Consolas',
+                                size: CODE_SIZE,
+                                color: COLORS.inlineText,
+                                shading: { type: docx.ShadingType.SOLID, color: COLORS.inlineBg }
+                            }));
+                        }
+                        break;
+                    }
+                    case 'link': {
+                        const linkRuns = processInlineTokens(token.tokens, {
+                            color: COLORS.link,
+                            underline: { type: docx.UnderlineType.SINGLE, color: COLORS.link }
+                        });
+                        runs.push(...linkRuns);
+                        break;
+                    }
+                    case 'image': {
+                        // Can't embed remote images in pure client-side; include alt text
+                        const altText = token.text || token.href || 'Image';
+                        runs.push(new docx.TextRun({
+                            text: `[${altText}]`,
+                            font: 'Calibri',
+                            size: BODY_SIZE,
+                            italics: true,
+                            color: COLORS.quoteText
+                        }));
+                        break;
+                    }
+                    case 'br': {
+                        runs.push(new docx.TextRun({ break: 1 }));
+                        break;
+                    }
+                    case 'del':
+                    case 'strikethrough': {
+                        runs.push(...processInlineTokens(token.tokens, { ...overrides, strike: true }));
+                        break;
+                    }
+                    default: {
+                        // Fallback: if token has raw text, include it
+                        if (token.raw) {
+                            runs.push(new docx.TextRun({ ...baseRun, text: token.raw }));
+                        }
+                    }
+                }
+            }
+            return runs;
+        }
+
+        /**
+         * Process top-level block tokens into docx elements.
+         */
+        function processBlockTokens(tokens) {
+            const elements = [];
+            if (!tokens) return elements;
+
+            for (const token of tokens) {
+                switch (token.type) {
+                    case 'heading': {
+                        const idx = Math.min(token.depth - 1, 5);
+                        const headingLevels = [
+                            docx.HeadingLevel.HEADING_1, docx.HeadingLevel.HEADING_2,
+                            docx.HeadingLevel.HEADING_3, docx.HeadingLevel.HEADING_4,
+                            docx.HeadingLevel.HEADING_5, docx.HeadingLevel.HEADING_6
+                        ];
+                        const runs = processInlineTokens(token.tokens, {
+                            bold: true,
+                            color: [COLORS.h1, COLORS.h2, COLORS.h3, COLORS.h4, COLORS.h5, COLORS.h6][idx],
+                            font: 'Cambria',
+                            size: HEADING_SIZES[idx]
+                        });
+                        if (runs.length === 0) runs.push(new docx.TextRun({ text: ' ', font: 'Cambria', size: HEADING_SIZES[idx] }));
+                        elements.push(new docx.Paragraph({
+                            heading: headingLevels[idx],
+                            spacing: { before: idx === 0 ? 480 : 360, after: 200 },
+                            children: runs
+                        }));
+                        break;
+                    }
+
+                    case 'paragraph': {
+                        const runs = processInlineTokens(token.tokens);
+                        if (runs.length > 0) {
+                            elements.push(new docx.Paragraph({
+                                spacing: { after: 200, line: 360 },
+                                children: runs
+                            }));
+                        }
+                        break;
+                    }
+
+                    case 'text': {
+                        // Top-level text (outside paragraphs — rare but possible)
+                        if (token.text && token.text.trim()) {
+                            elements.push(new docx.Paragraph({
+                                spacing: { after: 200, line: 360 },
+                                children: [new docx.TextRun({ text: token.text, font: 'Calibri', size: BODY_SIZE, color: COLORS.body })]
+                            }));
+                        }
+                        break;
+                    }
+
+                    case 'code': {
+                        // Fenced code block
+                        const lines = token.text.split('\n');
+                        const codeParagraphs = lines.map(line =>
+                            new docx.Paragraph({
+                                spacing: { after: 0, line: 276 },
+                                shading: { type: docx.ShadingType.SOLID, color: COLORS.codeBg },
+                                indent: { left: 360 },
+                                border: { left: { style: docx.BorderStyle.SINGLE, size: 12, color: COLORS.bullet, space: 8 } },
+                                children: [
+                                    new docx.TextRun({
+                                        text: line || ' ',
+                                        font: 'Consolas',
+                                        size: CODE_SIZE,
+                                        color: COLORS.codeText
+                                    })
+                                ]
+                            })
+                        );
+                        elements.push(...codeParagraphs);
+                        // Spacing after code block
+                        elements.push(new docx.Paragraph({ spacing: { after: 200 }, children: [] }));
+                        break;
+                    }
+
+                    case 'list': {
+                        const reference = token.ordered ? 'ordered-list' : 'bullet-list';
+                        processListItems(token.items, 0, reference, elements);
+                        elements.push(new docx.Paragraph({ spacing: { after: 120 }, children: [] }));
+                        break;
+                    }
+
+                    case 'blockquote': {
+                        processBlockquote(token, elements, 0);
+                        break;
+                    }
+
+                    case 'table': {
+                        processTable(token, elements);
+                        break;
+                    }
+
+                    case 'hr': {
+                        elements.push(new docx.Paragraph({
+                            spacing: { before: 240, after: 240 },
+                            border: { bottom: { style: docx.BorderStyle.SINGLE, size: 6, color: COLORS.hr, space: 1 } },
+                            children: []
+                        }));
+                        break;
+                    }
+
+                    case 'html': {
+                        // Include raw HTML as plain text (can't render HTML in Word natively)
+                        if (token.text && token.text.trim()) {
+                            elements.push(new docx.Paragraph({
+                                spacing: { after: 200, line: 360 },
+                                children: [new docx.TextRun({ text: token.text, font: 'Calibri', size: BODY_SIZE, color: COLORS.body })]
+                            }));
+                        }
+                        break;
+                    }
+
+                    case 'space': {
+                        break; // Ignore whitespace tokens
+                    }
+
+                    default: {
+                        // Fallback for unknown tokens
+                        if (token.text) {
+                            elements.push(new docx.Paragraph({
+                                spacing: { after: 200 },
+                                children: [new docx.TextRun({ text: token.text, font: 'Calibri', size: BODY_SIZE, color: COLORS.body })]
+                            }));
+                        }
+                    }
+                }
+            }
+            return elements;
+        }
+
+        /**
+         * Process list items (handles nesting recursively).
+         */
+        function processListItems(items, level, reference, elements) {
+            for (const item of items) {
+                const inlineTokens = [];
+                const nestedLists = [];
+
+                // Extract inline tokens from list item
+                for (const t of (item.tokens || [])) {
+                    if (t.type === 'paragraph') {
+                        // Paragraph tokens contain the actual inline tokens
+                        if (t.tokens) inlineTokens.push(...t.tokens);
+                    } else if (t.type === 'text') {
+                        inlineTokens.push(t);
+                    } else if (t.type === 'list') {
+                        nestedLists.push(t);
+                    }
+                }
+
+                const runs = [];
+
+                // Task list checkbox
+                if (item.task) {
+                    runs.push(new docx.TextRun({
+                        text: item.checked ? '\u2611 ' : '\u2610 ',
+                        font: 'Segoe UI Symbol',
+                        size: BODY_SIZE,
+                        color: COLORS.bullet
+                    }));
+                }
+
+                runs.push(...processInlineTokens(inlineTokens));
+
+                if (runs.length > 0) {
+                    elements.push(new docx.Paragraph({
+                        numbering: { reference, level: Math.min(level, 2) },
+                        spacing: { after: 60, line: 360 },
+                        children: runs
+                    }));
+                }
+
+                // Process nested lists
+                for (const nl of nestedLists) {
+                    const nestedRef = nl.ordered ? 'ordered-list' : 'bullet-list';
+                    processListItems(nl.items, level + 1, nestedRef, elements);
+                }
+            }
+        }
+
+        /**
+         * Process blockquote tokens (handles nesting).
+         */
+        function processBlockquote(token, elements, depth) {
+            const indentLeft = 720 + (depth * 360);
+            const borderSize = Math.max(24 - depth * 6, 8);
+
+            for (const bt of (token.tokens || [])) {
+                if (bt.type === 'paragraph') {
+                    const runs = processInlineTokens(bt.tokens, { italics: true, color: COLORS.quoteText });
+                    if (runs.length > 0) {
+                        elements.push(new docx.Paragraph({
+                            spacing: { before: 80, after: 80, line: 360 },
+                            indent: { left: indentLeft },
+                            border: { left: { style: docx.BorderStyle.SINGLE, size: borderSize, color: COLORS.quoteBorder, space: 8 } },
+                            children: runs
+                        }));
+                    }
+                } else if (bt.type === 'blockquote') {
+                    // Nested blockquote
+                    processBlockquote(bt, elements, depth + 1);
+                } else if (bt.type === 'heading') {
+                    const idx = Math.min(bt.depth - 1, 5);
+                    const runs = processInlineTokens(bt.tokens, {
+                        bold: true, italics: true,
+                        color: COLORS.quoteBorder,
+                        font: 'Cambria',
+                        size: Math.max(HEADING_SIZES[idx] - 4, 20)
+                    });
+                    if (runs.length > 0) {
+                        elements.push(new docx.Paragraph({
+                            spacing: { before: 160, after: 80 },
+                            indent: { left: indentLeft },
+                            border: { left: { style: docx.BorderStyle.SINGLE, size: borderSize, color: COLORS.quoteBorder, space: 8 } },
+                            children: runs
+                        }));
+                    }
+                } else if (bt.type === 'list') {
+                    const ref = bt.ordered ? 'ordered-list' : 'bullet-list';
+                    // Process list items within blockquote with extra indent
+                    for (const item of bt.items) {
+                        const inlineTokens = [];
+                        for (const t of (item.tokens || [])) {
+                            if (t.type === 'paragraph' && t.tokens) inlineTokens.push(...t.tokens);
+                            else if (t.type === 'text') inlineTokens.push(t);
+                        }
+                        const runs = processInlineTokens(inlineTokens, { italics: true, color: COLORS.quoteText });
+                        if (runs.length > 0) {
+                            elements.push(new docx.Paragraph({
+                                numbering: { reference: ref, level: 0 },
+                                spacing: { after: 60, line: 360 },
+                                indent: { left: indentLeft + 360 },
+                                border: { left: { style: docx.BorderStyle.SINGLE, size: borderSize, color: COLORS.quoteBorder, space: 8 } },
+                                children: runs
+                            }));
+                        }
+                    }
+                } else if (bt.type === 'hr') {
+                    elements.push(new docx.Paragraph({
+                        spacing: { before: 120, after: 120 },
+                        indent: { left: indentLeft },
+                        border: { bottom: { style: docx.BorderStyle.SINGLE, size: 3, color: COLORS.quoteBorder, space: 1 } },
+                        children: []
+                    }));
+                }
+            }
+        }
+
+        /**
+         * Process table tokens into a docx Table.
+         */
+        function processTable(token, elements) {
+            // Extract cell text from tokens
+            const getCellText = (cell) => {
+                if (!cell.tokens) return cell.text || '';
+                return cell.tokens.map(t => {
+                    if (t.type === 'text') return t.text || '';
+                    if (t.type === 'codespan') return t.text || '';
+                    if (t.type === 'strong' && t.tokens) return t.tokens.map(st => st.text || '').join('');
+                    if (t.type === 'em' && t.tokens) return t.tokens.map(st => st.text || '').join('');
+                    if (t.type === 'link' && t.tokens) return t.tokens.map(st => st.text || '').join('');
+                    return t.text || t.raw || '';
+                }).join('');
+            };
+
+            // Get cell runs with inline formatting
+            const getCellRuns = (cell, isHeader) => {
+                if (!cell.tokens) {
+                    return [new docx.TextRun({
+                        text: cell.text || '',
+                        font: 'Calibri', size: CODE_SIZE,
+                        bold: isHeader, color: isHeader ? COLORS.tableHeaderText : COLORS.body
+                    })];
+                }
+                const overrides = isHeader
+                    ? { bold: true, color: COLORS.tableHeaderText, size: CODE_SIZE }
+                    : { size: CODE_SIZE };
+                return processInlineTokens(cell.tokens, overrides);
+            };
+
+            // Header row
+            const headerCells = (token.header || []).map(h =>
+                new docx.TableCell({
+                    shading: { type: docx.ShadingType.SOLID, color: COLORS.tableHeaderBg },
+                    verticalAlign: docx.VerticalAlign.CENTER,
+                    children: [new docx.Paragraph({
+                        alignment: docx.AlignmentType.CENTER,
+                        spacing: { before: 60, after: 60 },
+                        children: getCellRuns(h, true)
+                    })]
+                })
+            );
+
+            if (headerCells.length > 0) {
+                elements.push(new docx.TableRow({
+                    tableHeader: true,
+                    children: headerCells
+                }));
+            }
+
+            // Data rows
+            (token.rows || []).forEach((row, rowIdx) => {
+                const bgColor = rowIdx % 2 === 0 ? COLORS.tableRow1 : COLORS.tableRow2;
+                const cells = row.map(cell =>
+                    new docx.TableCell({
+                        shading: { type: docx.ShadingType.SOLID, color: bgColor },
+                        verticalAlign: docx.VerticalAlign.CENTER,
+                        children: [new docx.Paragraph({
+                            spacing: { before: 40, after: 40 },
+                            children: getCellRuns(cell, false)
+                        })]
+                    })
+                );
+                elements.push(new docx.TableRow({ children: cells }));
+            });
+
+            // Spacing after table
+            elements.push(new docx.Paragraph({ spacing: { after: 240 }, children: [] }));
+        }
+
+        /**
+         * Build the complete docx Document and return it as a Blob.
+         */
+        async function buildDocx() {
+            const docElements = processBlockTokens(currentTokens);
+
+            // If no content was generated, add a placeholder
+            if (docElements.length === 0) {
+                docElements.push(new docx.Paragraph({
+                    children: [new docx.TextRun({ text: currentMarkdown, font: 'Calibri', size: BODY_SIZE, color: COLORS.body })]
+                }));
+            }
+
+            const doc = new docx.Document({
+                creator: 'Markify Converter',
+                description: 'Converted from Markdown',
+                styles: {
+                    default: {
+                        document: {
+                            run: { font: 'Calibri', size: BODY_SIZE, color: COLORS.body }
+                        },
+                        heading1: {
+                            run: { font: 'Cambria', size: HEADING_SIZES[0], bold: true, color: COLORS.h1 },
+                            paragraph: { spacing: { before: 480, after: 200 } }
+                        },
+                        heading2: {
+                            run: { font: 'Cambria', size: HEADING_SIZES[1], bold: true, color: COLORS.h2 },
+                            paragraph: { spacing: { before: 360, after: 200 } }
+                        },
+                        heading3: {
+                            run: { font: 'Cambria', size: HEADING_SIZES[2], bold: true, color: COLORS.h3 },
+                            paragraph: { spacing: { before: 360, after: 200 } }
+                        },
+                        heading4: {
+                            run: { font: 'Cambria', size: HEADING_SIZES[3], bold: true, color: COLORS.h4 },
+                            paragraph: { spacing: { before: 240, after: 160 } }
+                        },
+                        heading5: {
+                            run: { font: 'Cambria', size: HEADING_SIZES[4], bold: true, color: COLORS.h5 },
+                            paragraph: { spacing: { before: 200, after: 120 } }
+                        },
+                        heading6: {
+                            run: { font: 'Cambria', size: HEADING_SIZES[5], bold: true, color: COLORS.h6 },
+                            paragraph: { spacing: { before: 200, after: 120 } }
+                        }
+                    }
+                },
+                numbering: {
+                    config: [
+                        {
+                            reference: 'bullet-list',
+                            levels: [
+                                {
+                                    level: 0,
+                                    format: docx.NumberFormat.BULLET,
+                                    text: '\u2022',
+                                    alignment: docx.AlignmentType.LEFT,
+                                    style: {
+                                        paragraph: {
+                                            indent: { left: docx.convertInchesToTwip(0.5), hanging: docx.convertInchesToTwip(0.25) }
+                                        },
+                                        run: { font: 'Calibri', color: COLORS.bullet }
+                                    }
+                                },
+                                {
+                                    level: 1,
+                                    format: docx.NumberFormat.BULLET,
+                                    text: '\u25E6',
+                                    alignment: docx.AlignmentType.LEFT,
+                                    style: {
+                                        paragraph: {
+                                            indent: { left: docx.convertInchesToTwip(1.0), hanging: docx.convertInchesToTwip(0.25) }
+                                        },
+                                        run: { font: 'Calibri', color: COLORS.bullet }
+                                    }
+                                },
+                                {
+                                    level: 2,
+                                    format: docx.NumberFormat.BULLET,
+                                    text: '\u25AA',
+                                    alignment: docx.AlignmentType.LEFT,
+                                    style: {
+                                        paragraph: {
+                                            indent: { left: docx.convertInchesToTwip(1.5), hanging: docx.convertInchesToTwip(0.25) }
+                                        },
+                                        run: { font: 'Calibri', color: COLORS.bullet }
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            reference: 'ordered-list',
+                            levels: [
+                                {
+                                    level: 0,
+                                    format: docx.NumberFormat.DECIMAL,
+                                    text: '%1.',
+                                    alignment: docx.AlignmentType.LEFT,
+                                    style: {
+                                        paragraph: {
+                                            indent: { left: docx.convertInchesToTwip(0.5), hanging: docx.convertInchesToTwip(0.25) }
+                                        },
+                                        run: { font: 'Calibri', color: COLORS.bullet, bold: true }
+                                    }
+                                },
+                                {
+                                    level: 1,
+                                    format: docx.NumberFormat.LOWER_LETTER,
+                                    text: '%2)',
+                                    alignment: docx.AlignmentType.LEFT,
+                                    style: {
+                                        paragraph: {
+                                            indent: { left: docx.convertInchesToTwip(1.0), hanging: docx.convertInchesToTwip(0.25) }
+                                        },
+                                        run: { font: 'Calibri', color: COLORS.bullet }
+                                    }
+                                },
+                                {
+                                    level: 2,
+                                    format: docx.NumberFormat.LOWER_ROMAN,
+                                    text: '%3.',
+                                    alignment: docx.AlignmentType.LEFT,
+                                    style: {
+                                        paragraph: {
+                                            indent: { left: docx.convertInchesToTwip(1.5), hanging: docx.convertInchesToTwip(0.25) }
+                                        },
+                                        run: { font: 'Calibri', color: COLORS.bullet }
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                sections: [{
+                    properties: {
+                        page: {
+                            margin: {
+                                top: docx.convertInchesToTwip(1),
+                                bottom: docx.convertInchesToTwip(1),
+                                left: docx.convertInchesToTwip(1.15),
+                                right: docx.convertInchesToTwip(1.15)
+                            }
+                        }
+                    },
+                    headers: {
+                        default: new docx.Header({
+                            children: [new docx.Paragraph({
+                                alignment: docx.AlignmentType.RIGHT,
+                                border: { bottom: { style: docx.BorderStyle.SINGLE, size: 4, color: COLORS.hr, space: 4 } },
+                                spacing: { after: 120 },
+                                children: [
+                                    new docx.TextRun({
+                                        text: 'Converted from Markdown',
+                                        font: 'Calibri',
+                                        size: 16, // 8pt
+                                        color: COLORS.headerText,
+                                        italics: true
+                                    })
+                                ]
+                            })]
+                        })
+                    },
+                    footers: {
+                        default: new docx.Footer({
+                            children: [new docx.Paragraph({
+                                alignment: docx.AlignmentType.CENTER,
+                                border: { top: { style: docx.BorderStyle.SINGLE, size: 4, color: COLORS.hr, space: 4 } },
+                                spacing: { before: 120 },
+                                children: [
+                                    new docx.TextRun({ text: 'Page ', font: 'Calibri', size: 16, color: COLORS.footerText }),
+                                    new docx.TextRun({ children: [docx.PageNumber.CURRENT], font: 'Calibri', size: 16, color: COLORS.footerText }),
+                                    new docx.TextRun({ text: ' of ', font: 'Calibri', size: 16, color: COLORS.footerText }),
+                                    new docx.TextRun({ children: [docx.PageNumber.TOTAL_PAGES], font: 'Calibri', size: 16, color: COLORS.footerText })
+                                ]
+                            })]
+                        })
+                    },
+                    children: docElements
+                }]
+            });
+
+            return await docx.Packer.toBlob(doc);
+        }
+
+        /* =========================================================
+           CONVERSION FLOW
+           ========================================================= */
+        btnConvert.addEventListener('click', async () => {
+            btnConvert.disabled = true;
+            btnConvert.innerHTML = '<span class="spinner"></span> Loading converter...';
+
+            try {
+                // Lazy-load the docx library
+                await loadDocxLibrary();
+                btnConvert.innerHTML = '<span class="spinner"></span> Converting...';
+
+                // Small delay so the UI updates before heavy computation
+                await new Promise(r => setTimeout(r, 100));
+
+                // Build the document
+                outputBlob = await buildDocx();
+
+                // Generate output filename
+                const outputName = currentFile.name.replace(/\.(md|markdown|txt)$/i, '') + '.docx';
+
+                // Update result section
+                resultFilename.textContent = outputName;
+                resultFilesize.textContent = formatBytes(outputBlob.size);
+
+                // Show result section
+                showSection(sectionResult);
+                showToast('Document converted successfully!', 'success');
+
+            } catch (err) {
+                console.error('Conversion error:', err);
+                showToast(err.message || 'An error occurred during conversion.', 'error');
+                btnConvert.disabled = false;
+                btnConvert.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles" style="margin-right:0.5rem;"></i> Convert to DOCX';
+            }
+        });
+
+        /* =========================================================
+           DOWNLOAD
+           ========================================================= */
+        btnDownload.addEventListener('click', () => {
+            if (!outputBlob) return;
+            const outputName = currentFile.name.replace(/\.(md|markdown|txt)$/i, '') + '.docx';
+            const url = URL.createObjectURL(outputBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = outputName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+            showToast('Download started!', 'success');
+        });
+
+        /* =========================================================
+           NAVIGATION BUTTONS
+           ========================================================= */
+        btnClear.addEventListener('click', () => {
+            currentFile = null;
+            currentMarkdown = '';
+            currentTokens = [];
+            outputBlob = null;
+            showSection(sectionUpload);
+        });
+
+        btnAnother.addEventListener('click', () => {
+            currentFile = null;
+            currentMarkdown = '';
+            currentTokens = [];
+            outputBlob = null;
+            showSection(sectionUpload);
+        });
+    </script>
+</body>
+</html>
