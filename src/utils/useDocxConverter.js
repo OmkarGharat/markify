@@ -276,15 +276,71 @@ export function useDocxConverter() {
   }, [processInlineTokens]);
 
   const processBlockquote = useCallback((token, elements, depth) => {
+    let borderColor = COLORS.quoteBorder;
+    let iconText = '';
+    let isAlert = false;
+    let titleRun = null;
+    
+    // Check if it's a GitHub flavored alert block
+    if (token.tokens && token.tokens.length > 0 && token.tokens[0].type === 'paragraph') {
+      const firstPar = token.tokens[0];
+      if (firstPar.tokens && firstPar.tokens.length > 0) {
+        let textIdx = firstPar.tokens.findIndex(t => t.type === 'text');
+        if (textIdx !== -1) {
+          const textToken = firstPar.tokens[textIdx];
+          const text = textToken.text.trimStart();
+          const alertMatch = text.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i);
+          if (alertMatch) {
+            isAlert = true;
+            const alertType = alertMatch[1].toUpperCase();
+            
+            const alertStyles = {
+              NOTE: { color: '0969DA', label: 'Note' },
+              TIP: { color: '1A7F37', label: 'Tip' },
+              IMPORTANT: { color: '8250DF', label: 'Important' },
+              WARNING: { color: '9A6700', label: 'Warning' },
+              CAUTION: { color: 'CF222E', label: 'Caution' }
+            };
+            
+            const style = alertStyles[alertType] || alertStyles.NOTE;
+            borderColor = style.color;
+            iconText = style.label;
+            
+            textToken.text = textToken.text.replace(/^\s*\[![A-Z]+\][\s\n]*/i, '');
+            
+            if (!textToken.text) {
+               firstPar.tokens.splice(textIdx, 1);
+               if (firstPar.tokens.length > textIdx && (firstPar.tokens[textIdx].type === 'space' || firstPar.tokens[textIdx].type === 'br')) {
+                 firstPar.tokens.splice(textIdx, 1);
+               }
+            }
+            
+            titleRun = new Paragraph({
+               spacing: { before: 80, after: 80, line: 360 },
+               indent: { left: 720 + (depth * 360) },
+               border: {
+                 left: { style: BorderStyle.SINGLE, size: Math.max(24 - depth * 6, 8), color: borderColor, space: 8 }
+               },
+               children: [
+                 new TextRun({ text: iconText, bold: true, color: borderColor, size: BODY_SIZE })
+               ]
+            });
+          }
+        }
+      }
+    }
+
     const indentLeft = 720 + (depth * 360);
     const borderSize = Math.max(24 - depth * 6, 8);
 
+    if (titleRun) {
+      elements.push(titleRun);
+    }
+
     for (const bt of (token.tokens || [])) {
       if (bt.type === 'paragraph') {
-        const runs = processInlineTokens(bt.tokens, {
-          italics: true,
-          color: COLORS.quoteText
-        });
+        const overrides = isAlert ? { color: COLORS.body } : { italics: true, color: COLORS.quoteText };
+        const runs = processInlineTokens(bt.tokens, overrides);
         if (runs.length > 0) {
           elements.push(new Paragraph({
             spacing: { before: 80, after: 80, line: 360 },
@@ -293,7 +349,7 @@ export function useDocxConverter() {
               left: {
                 style: BorderStyle.SINGLE,
                 size: borderSize,
-                color: COLORS.quoteBorder,
+                color: borderColor,
                 space: 8
               }
             },
