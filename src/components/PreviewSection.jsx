@@ -1,11 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { marked } from 'marked';
 import { formatBytes } from '../utils/formatBytes';
 import { analyzeDocument } from '../utils/documentAnalyzer';
 import './PreviewSection.css';
 
 export function PreviewSection({ file, markdown, tokens, onConvert, onClear, isConverting, error }) {
-  const [showAnalysis, setShowAnalysis] = useState(true);
 
   const previewHtml = useMemo(() => {
     try {

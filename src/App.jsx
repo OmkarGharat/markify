@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { UploadSection } from './components/UploadSection';
 import { PreviewSection } from './components/PreviewSection';
 import { ResultSection } from './components/ResultSection';

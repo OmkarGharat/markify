@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { marked } from 'marked';
 import { analyzeDocument } from '../utils/documentAnalyzer';
 import fs from 'fs';
@@ -10,18 +10,11 @@ const __dirname = path.dirname(__filename);
 
 describe('Markdown Syntax Support Tests', () => {
   let comprehensiveTokens;
-  let largeFileTokens;
-
   beforeAll(async () => {
     // Load comprehensive syntax test file
     const comprehensivePath = path.join(__dirname, '../../test_comprehensive_syntax.md');
     const comprehensiveContent = fs.readFileSync(comprehensivePath, 'utf8');
     comprehensiveTokens = marked.lexer(comprehensiveContent, { gfm: true });
-
-    // Load large file test
-    const largeFilePath = path.join(__dirname, '../../test_large_100pages.md');
-    const largeFileContent = fs.readFileSync(largeFilePath, 'utf8');
-    largeFileTokens = marked.lexer(largeFileContent, { gfm: true });
   });
 
   describe('Heading Support', () => {

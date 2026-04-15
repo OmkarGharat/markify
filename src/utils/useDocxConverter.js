@@ -398,8 +398,7 @@ export function useDocxConverter() {
       }));
     }
 
-    (token.rows || []).forEach((row, rowIdx) => {
-      const bgColor = rowIdx % 2 === 0 ? COLORS.tableRow1 : COLORS.tableRow2;
+    (token.rows || []).forEach((row) => {
       const cells = row.map(cell =>
         new Paragraph({
           text: cell.text || '',

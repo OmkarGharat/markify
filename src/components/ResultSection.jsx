@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { formatBytes } from '../utils/formatBytes';
 import './ResultSection.css';
 
