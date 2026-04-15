@@ -35,9 +35,9 @@ describe('UploadSection', () => {
   });
 
   it('calls onFileSelect when file input changes', async () => {
-    render(<UploadSection onFileSelect={mockOnFileSelect} />);
+    const { container } = render(<UploadSection onFileSelect={mockOnFileSelect} />);
 
-    const fileInput = screen.getByLabelText(/upload a markdown file/i);
+    const fileInput = container.querySelector('#file-input');
     const file = new File(['# Test content'], 'test.md', { type: 'text/markdown' });
 
     fireEvent.change(fileInput, { target: { files: [file] } });
