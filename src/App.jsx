@@ -33,10 +33,12 @@ function App() {
     setCurrentSection('upload');
   }, [clearFile]);
 
-  // Reset to upload section when file is cleared
+  // Handle section transitions based on file state
   useEffect(() => {
     if (!currentFile && currentSection !== 'upload') {
       setCurrentSection('upload');
+    } else if (currentFile && currentSection === 'upload') {
+      setCurrentSection('preview');
     }
   }, [currentFile, currentSection]);
 
