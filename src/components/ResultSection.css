@@ -1,0 +1,152 @@
+.result-section {
+  animation: fadeSlideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.result-card {
+  text-align: center;
+  padding: 3rem 2rem;
+  border-radius: 20px;
+}
+
+.success-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10B981, #059669);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem;
+  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes popIn {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.success-icon i {
+  font-size: 2rem;
+  color: white;
+  animation: checkDraw 0.3s 0.3s ease both;
+}
+
+@keyframes checkDraw {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.result-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+  color: var(--fg);
+}
+
+.result-filename {
+  color: var(--muted);
+  font-size: 0.95rem;
+  margin-bottom: 0.3rem;
+}
+
+.result-filesize {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 2rem;
+}
+
+.btn-download {
+  background: linear-gradient(135deg, #10B981, #059669);
+  color: white;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  font-size: 1.1rem;
+  padding: 1rem 3rem;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-download:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px var(--accent-glow);
+}
+
+.btn-download:active {
+  transform: translateY(0);
+}
+
+.result-actions {
+  margin-top: 1.2rem;
+}
+
+.btn-another {
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 500;
+  font-size: 0.95rem;
+  padding: 0.7rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn-another:hover {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .result-card {
+    padding: 2rem 1.5rem;
+  }
+
+  .result-title {
+    font-size: 1.25rem;
+  }
+
+  .btn-download {
+    font-size: 1rem;
+    padding: 0.875rem 2rem;
+  }
+
+  .btn-another {
+    font-size: 0.9rem;
+    padding: 0.6rem 1.25rem;
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "name": "markify",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Professional Markdown to Word Document Converter",
+  "author": "Markify Team",
+  "license": "MIT",
+  "main": "index.html",
+  "keywords": [
+    "markdown",
+    "docx",
+    "converter",
+    "word",
+    "document"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "docx": "^8.5.0",
+    "marked": "^12.0.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/ui": "^1.3.1",
+    "autoprefixer": "^10.4.18",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.34.0",
+    "husky": "^9.0.11",
+    "jsdom": "^24.0.0",
+    "lint-staged": "^15.2.2",
+    "postcss": "^8.4.35",
+    "prettier": "^3.2.5",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.5",
+    "vitest": "^1.3.1",
+    "workbox-window": "^7.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,html}\"",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules/.vite",
+    "prepare": "husky install"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{css,html}": [
+      "prettier --write"
+    ]
+  }
+}

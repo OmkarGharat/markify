@@ -1,0 +1,160 @@
+.app {
+  position: relative;
+  min-height: 100vh;
+}
+
+/* Animated background blobs */
+.blob {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(100px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.blob-1 {
+  width: 500px;
+  height: 500px;
+  background: var(--accent);
+  opacity: 0.08;
+  top: -100px;
+  left: -100px;
+  animation: drift1 25s ease-in-out infinite;
+}
+
+.blob-2 {
+  width: 400px;
+  height: 400px;
+  background: var(--gold);
+  opacity: 0.06;
+  bottom: -50px;
+  right: -80px;
+  animation: drift2 30s ease-in-out infinite;
+}
+
+.blob-3 {
+  width: 350px;
+  height: 350px;
+  background: #6366F1;
+  opacity: 0.05;
+  top: 40%;
+  left: 50%;
+  animation: drift3 22s ease-in-out infinite;
+}
+
+@keyframes drift1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(80px, 60px) scale(1.15);
+  }
+  66% {
+    transform: translate(-40px, 100px) scale(0.9);
+  }
+}
+
+@keyframes drift2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(-60px, -80px) scale(1.1);
+  }
+  66% {
+    transform: translate(50px, -30px) scale(0.95);
+  }
+}
+
+@keyframes drift3 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-70px, 50px) scale(1.2);
+  }
+}
+
+/* Subtle grid overlay */
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(148, 163, 184, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+.main-container {
+  position: relative;
+  z-index: 1;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+/* Header */
+.header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+  padding-top: 1rem;
+}
+
+.header-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.logo-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #10B981, #059669);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-icon i {
+  color: white;
+  font-size: 1.125rem;
+}
+
+.app-title {
+  font-size: 1.875rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--fg);
+}
+
+.app-subtitle {
+  color: var(--muted);
+  font-size: 1.05rem;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .main-container {
+    padding: 1.5rem 1rem;
+  }
+
+  .header {
+    margin-bottom: 2rem;
+  }
+
+  .app-title {
+    font-size: 1.5rem;
+  }
+
+  .app-subtitle {
+    font-size: 0.95rem;
+  }
+}
