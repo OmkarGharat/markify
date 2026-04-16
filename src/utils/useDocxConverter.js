@@ -4,6 +4,43 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
 import { COLORS, HEADING_SIZES, BODY_SIZE, CODE_SIZE } from '../styles/docxStyles';
 import { showToast } from './toast';
 
+// marked's lexer HTML-encodes special characters in token.text (e.g. & → &amp;,
+// ' → &#39;). Decode them before writing to DOCX so Word shows the real characters.
+function decodeHtmlEntities(str) {
+  if (!str || !str.includes('&')) return str;
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)));
+}
+
+// Splits a text string into TextRun segments so emoji characters get the
+// 'Segoe UI Emoji' font (which Cambria/Calibri don't support on most platforms).
+function createEmojiAwareRuns(text, baseProps) {
+  if (!text) return [];
+  text = decodeHtmlEntities(text); // must happen before emoji splitting
+  const EMOJI_RE = /\p{Emoji_Presentation}|\p{Extended_Pictographic}/gu;
+  const runs = [];
+  let lastIndex = 0;
+  let match;
+  while ((match = EMOJI_RE.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      runs.push(new TextRun({ ...baseProps, text: text.slice(lastIndex, match.index) }));
+    }
+    // Emoji: override font, strip color so Word uses its built-in color rendering
+    runs.push(new TextRun({ ...baseProps, text: match[0], font: 'Segoe UI Emoji', color: undefined }));
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    runs.push(new TextRun({ ...baseProps, text: text.slice(lastIndex) }));
+  }
+  return runs.length > 0 ? runs : [new TextRun({ ...baseProps, text })];
+}
+
 export function useDocxConverter() {
   const [outputBlob, setOutputBlob] = useState(null);
   const [isConverting, setIsConverting] = useState(false);
@@ -26,7 +63,7 @@ export function useDocxConverter() {
           if (token.tokens && token.tokens.length > 0) {
             runs.push(...processInlineTokens(token.tokens, overrides));
           } else if (token.text) {
-            runs.push(new TextRun({ ...baseRun, text: token.text }));
+            runs.push(...createEmojiAwareRuns(token.text, baseRun));
           }
           break;
         }
@@ -49,7 +86,7 @@ export function useDocxConverter() {
               font: 'Consolas',
               size: CODE_SIZE,
               color: COLORS.inlineText,
-              shading: { type: ShadingType.SOLID, fill: COLORS.inlineBg }
+              shading: { type: ShadingType.CLEAR, fill: COLORS.inlineBg }
             }));
           }
           break;
@@ -153,28 +190,72 @@ export function useDocxConverter() {
         }
 
         case 'code': {
+          // Carousel blocks (4-backtick fenced blocks) — render as a clean slide list
+          if (token.lang === 'carousel') {
+            const imageMatches = [...token.text.matchAll(/!\[([^\]]+)\]/g)];
+            elements.push(new Paragraph({
+              spacing: { before: 240, after: 80 },
+              border: { left: { style: BorderStyle.SINGLE, size: 16, color: COLORS.h3, space: 8 } },
+              indent: { left: 360 },
+              children: [new TextRun({
+                text: `Carousel — ${imageMatches.length} slide${imageMatches.length !== 1 ? 's' : ''}`,
+                font: 'Calibri', size: BODY_SIZE, bold: true, color: COLORS.h3
+              })]
+            }));
+            imageMatches.forEach((m, i) => {
+              elements.push(new Paragraph({
+                spacing: { before: 40, after: 40 },
+                indent: { left: 720 },
+                children: [
+                  new TextRun({ text: `${i + 1}.  `, font: 'Calibri', size: BODY_SIZE, color: COLORS.bullet, bold: true }),
+                  new TextRun({ text: m[1], font: 'Calibri', size: BODY_SIZE, color: COLORS.quoteText, italics: true })
+                ]
+              }));
+            });
+            elements.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
+            break;
+          }
+
+          // Diff blocks — colour added/removed lines green/red
+          if (token.lang === 'diff') {
+            if (token.lang) {
+              elements.push(new Paragraph({
+                spacing: { before: 240, after: 0 },
+                children: [new TextRun({ text: 'diff', font: 'Consolas', size: 16, color: COLORS.headerText, bold: true })]
+              }));
+            }
+            token.text.split('\n').forEach(line => {
+              const isAdd = line.startsWith('+');
+              const isDel = line.startsWith('-');
+              const lineColor = isAdd ? '1A7F37' : isDel ? 'CF222E' : COLORS.codeText;
+              const lineBg   = isAdd ? 'E6FFEC'  : isDel ? 'FFEBE9'  : COLORS.codeBg;
+              elements.push(new Paragraph({
+                spacing: { after: 0, line: 276 },
+                shading: { type: ShadingType.CLEAR, fill: lineBg },
+                indent: { left: 360 },
+                border: { left: { style: BorderStyle.SINGLE, size: 12, color: lineColor, space: 8 } },
+                children: [new TextRun({ text: line || ' ', font: 'Consolas', size: CODE_SIZE, color: lineColor })]
+              }));
+            });
+            elements.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
+            break;
+          }
+
+          // Generic code block — show language label if present
+          if (token.lang) {
+            elements.push(new Paragraph({
+              spacing: { before: 240, after: 0 },
+              children: [new TextRun({ text: token.lang, font: 'Consolas', size: 16, color: COLORS.headerText, bold: true })]
+            }));
+          }
           const lines = token.text.split('\n');
           const codeParagraphs = lines.map(line =>
             new Paragraph({
               spacing: { after: 0, line: 276 },
-              shading: { type: ShadingType.SOLID, fill: COLORS.codeBg },
+              shading: { type: ShadingType.CLEAR, fill: COLORS.codeBg },
               indent: { left: 360 },
-              border: {
-                left: {
-                  style: BorderStyle.SINGLE,
-                  size: 12,
-                  color: COLORS.bullet,
-                  space: 8
-                }
-              },
-              children: [
-                new TextRun({
-                  text: line || ' ',
-                  font: 'Consolas',
-                  size: CODE_SIZE,
-                  color: COLORS.codeText
-                })
-              ]
+              border: { left: { style: BorderStyle.SINGLE, size: 12, color: COLORS.bullet, space: 8 } },
+              children: [new TextRun({ text: line || ' ', font: 'Consolas', size: CODE_SIZE, color: COLORS.codeText })]
             })
           );
           elements.push(...codeParagraphs);
@@ -363,15 +444,35 @@ export function useDocxConverter() {
   }, [processInlineTokens]);
 
   const processTable = useCallback((token, elements) => {
+    const numCols = (token.header || []).length;
+    if (numCols === 0) return;
+
+    const aligns = token.align || [];
+
+    // Give narrow columns (like "#", "№") a fixed small width;
+    // distribute the remainder evenly among the rest.
+    const headerTexts = (token.header || []).map(h => (h.text || '').trim());
+    const isNarrow = (txt) => /^[#№]$/.test(txt) || txt.length <= 2;
+    const narrowPct = 6;  // ~6% for a single-character index column
+    const narrowCount = headerTexts.filter(isNarrow).length;
+    const widePct = narrowCount < numCols
+      ? Math.floor((100 - narrowCount * narrowPct) / (numCols - narrowCount))
+      : Math.floor(100 / numCols);
+    const colPct = (colIdx) => isNarrow(headerTexts[colIdx]) ? narrowPct : widePct;
+
+    const getAlignment = (colIdx) => {
+      const a = aligns[colIdx];
+      if (a === 'right') return AlignmentType.RIGHT;
+      if (a === 'center') return AlignmentType.CENTER;
+      return AlignmentType.LEFT;
+    };
+
     const getCellRuns = (cell, isHeader) => {
       if (!cell.tokens) {
-        return [new TextRun({
-          text: cell.text || '',
-          font: 'Calibri',
-          size: CODE_SIZE,
-          bold: isHeader,
+        return createEmojiAwareRuns(cell.text || '', {
+          font: 'Calibri', size: CODE_SIZE, bold: isHeader,
           color: isHeader ? COLORS.tableHeaderText : COLORS.body
-        })];
+        });
       }
       const overrides = isHeader
         ? { bold: true, color: COLORS.tableHeaderText, size: CODE_SIZE }
@@ -379,35 +480,35 @@ export function useDocxConverter() {
       return processInlineTokens(cell.tokens, overrides);
     };
 
-    // Simplified table processing
-    const headerCells = (token.header || []).map(h =>
+    const tableRows = [];
+
+    // Header row — dark background, white bold text
+    const headerCells = (token.header || []).map((h, colIdx) =>
       new TableCell({
+        shading: { type: ShadingType.CLEAR, fill: COLORS.tableHeaderBg },
+        width: { size: colPct(colIdx), type: WidthType.PERCENTAGE },
         children: [
           new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 60, after: 60 },
+            alignment: getAlignment(colIdx),
+            spacing: { before: 80, after: 80 },
             children: getCellRuns(h, true)
           })
         ]
       })
     );
+    tableRows.push(new TableRow({ tableHeader: true, children: headerCells }));
 
-    const tableRows = [];
-
-    if (headerCells.length > 0) {
-      tableRows.push(new TableRow({
-        tableHeader: true,
-        children: headerCells
-      }));
-    }
-
-    (token.rows || []).forEach((row) => {
-      const cells = row.map(cell =>
+    // Data rows — alternating row shading
+    (token.rows || []).forEach((row, rowIdx) => {
+      const fill = rowIdx % 2 === 0 ? COLORS.tableRow1 : COLORS.tableRow2;
+      const cells = row.map((cell, colIdx) =>
         new TableCell({
+          shading: { type: ShadingType.CLEAR, fill },
+          width: { size: colPct(colIdx), type: WidthType.PERCENTAGE },
           children: [
             new Paragraph({
-              alignment: AlignmentType.CENTER,
-              spacing: { before: 40, after: 40 },
+              alignment: getAlignment(colIdx),
+              spacing: { before: 60, after: 60 },
               children: getCellRuns(cell, false)
             })
           ]
@@ -416,16 +517,7 @@ export function useDocxConverter() {
       tableRows.push(new TableRow({ children: cells }));
     });
 
-    if (tableRows.length > 0) {
-      elements.push(new Table({
-        rows: tableRows,
-        width: {
-          size: 100,
-          type: WidthType.PERCENTAGE
-        }
-      }));
-    }
-
+    elements.push(new Table({ rows: tableRows, width: { size: 100, type: WidthType.PERCENTAGE } }));
     elements.push(new Paragraph({ spacing: { after: 240 }, children: [] }));
   }, [processInlineTokens]);
 
