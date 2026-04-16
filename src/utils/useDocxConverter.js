@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
-  UnderlineType, ShadingType, BorderStyle, convertInchesToTwip, Table, TableRow, WidthType } from 'docx';
+  UnderlineType, ShadingType, BorderStyle, convertInchesToTwip, Table, TableRow, TableCell, WidthType } from 'docx';
 import { COLORS, HEADING_SIZES, BODY_SIZE, CODE_SIZE } from '../styles/docxStyles';
 import { showToast } from './toast';
 
@@ -381,11 +381,14 @@ export function useDocxConverter() {
 
     // Simplified table processing
     const headerCells = (token.header || []).map(h =>
-      new Paragraph({
-        text: h.text || '',
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 60, after: 60 },
-        children: getCellRuns(h, true)
+      new TableCell({
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 60, after: 60 },
+            children: getCellRuns(h, true)
+          })
+        ]
       })
     );
 
@@ -400,11 +403,14 @@ export function useDocxConverter() {
 
     (token.rows || []).forEach((row) => {
       const cells = row.map(cell =>
-        new Paragraph({
-          text: cell.text || '',
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 40, after: 40 },
-          children: getCellRuns(cell, false)
+        new TableCell({
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 40, after: 40 },
+              children: getCellRuns(cell, false)
+            })
+          ]
         })
       );
       tableRows.push(new TableRow({ children: cells }));
@@ -444,6 +450,26 @@ export function useDocxConverter() {
       const doc = new Document({
         creator: 'Markify Converter',
         description: 'Converted from Markdown',
+        numbering: {
+          config: [
+            {
+              reference: 'bullet-list',
+              levels: [
+                { level: 0, format: 'bullet', text: '\u25CF', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 360 } } } },
+                { level: 1, format: 'bullet', text: '\u25CB', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 1440, hanging: 360 } } } },
+                { level: 2, format: 'bullet', text: '\u25A0', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 2160, hanging: 360 } } } },
+              ]
+            },
+            {
+              reference: 'ordered-list',
+              levels: [
+                { level: 0, format: 'decimal', text: '%1.', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 720, hanging: 360 } } } },
+                { level: 1, format: 'decimal', text: '%2.', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 1440, hanging: 360 } } } },
+                { level: 2, format: 'decimal', text: '%3.', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 2160, hanging: 360 } } } },
+              ]
+            }
+          ]
+        },
         sections: [{
           properties: {
             page: {
