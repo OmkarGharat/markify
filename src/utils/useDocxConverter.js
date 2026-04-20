@@ -469,17 +469,52 @@ export function useDocxConverter() {
       return AlignmentType.LEFT;
     };
 
-    const getCellRuns = (cell, isHeader) => {
+    // Returns an array of Paragraph elements for a table cell.
+    // Splits on `br` tokens so bullet points written on separate lines
+    // each become their own Paragraph instead of emitting literal <br> text.
+    const getCellParagraphs = (cell, colIdx, isHeader) => {
+      const alignment = getAlignment(colIdx);
+      const spacing = isHeader ? { before: 80, after: 80 } : { before: 60, after: 60 };
+
+      const makeParagraph = (runs) => new Paragraph({
+        alignment,
+        spacing,
+        children: runs.length > 0 ? runs : [new TextRun({ text: ' ', size: CODE_SIZE })]
+      });
+
       if (!cell.tokens) {
-        return createEmojiAwareRuns(cell.text || '', {
+        const runs = createEmojiAwareRuns(cell.text || '', {
           font: 'Calibri', size: CODE_SIZE, bold: isHeader,
           color: isHeader ? COLORS.tableHeaderText : COLORS.body
         });
+        return [makeParagraph(runs)];
       }
+
       const overrides = isHeader
         ? { bold: true, color: COLORS.tableHeaderText, size: CODE_SIZE }
         : { size: CODE_SIZE };
-      return processInlineTokens(cell.tokens, overrides);
+
+      // Split the flat token list on `br` tokens → one paragraph per segment
+      const segments = [];
+      let current = [];
+      for (const t of cell.tokens) {
+        if (t.type === 'br') {
+          segments.push(current);
+          current = [];
+        } else {
+          current.push(t);
+        }
+      }
+      segments.push(current);
+
+      // If there was only one segment (no br tokens) just return one paragraph
+      if (segments.length === 1) {
+        return [makeParagraph(processInlineTokens(segments[0], overrides))];
+      }
+
+      return segments
+        .filter(seg => seg.length > 0)
+        .map(seg => makeParagraph(processInlineTokens(seg, overrides)));
     };
 
     const tableRows = [];
@@ -489,13 +524,7 @@ export function useDocxConverter() {
       new TableCell({
         shading: { type: ShadingType.CLEAR, fill: COLORS.tableHeaderBg },
         width: { size: colPct(colIdx), type: WidthType.PERCENTAGE },
-        children: [
-          new Paragraph({
-            alignment: getAlignment(colIdx),
-            spacing: { before: 80, after: 80 },
-            children: getCellRuns(h, true)
-          })
-        ]
+        children: getCellParagraphs(h, colIdx, true)
       })
     );
     tableRows.push(new TableRow({ tableHeader: true, children: headerCells }));
@@ -507,13 +536,7 @@ export function useDocxConverter() {
         new TableCell({
           shading: { type: ShadingType.CLEAR, fill },
           width: { size: colPct(colIdx), type: WidthType.PERCENTAGE },
-          children: [
-            new Paragraph({
-              alignment: getAlignment(colIdx),
-              spacing: { before: 60, after: 60 },
-              children: getCellRuns(cell, false)
-            })
-          ]
+          children: getCellParagraphs(cell, colIdx, false)
         })
       );
       tableRows.push(new TableRow({ children: cells }));
