@@ -82,7 +82,7 @@ export function useDocxConverter() {
         case 'codespan': {
           if (token.text) {
             runs.push(new TextRun({
-              text: token.text,
+              text: decodeHtmlEntities(token.text),
               font: 'Consolas',
               size: CODE_SIZE,
               color: COLORS.inlineText,
@@ -241,14 +241,8 @@ export function useDocxConverter() {
             break;
           }
 
-          // Generic code block — show language label if present
-          if (token.lang) {
-            elements.push(new Paragraph({
-              spacing: { before: 240, after: 0 },
-              children: [new TextRun({ text: token.lang, font: 'Consolas', size: 16, color: COLORS.headerText, bold: true })]
-            }));
-          }
-          const lines = token.text.split('\n');
+          // Generic code block — no language label, just render the lines
+          const lines = decodeHtmlEntities(token.text).split('\n');
           const codeParagraphs = lines.map(line =>
             new Paragraph({
               spacing: { after: 0, line: 276 },
@@ -331,22 +325,30 @@ export function useDocxConverter() {
       const runs = [];
 
       if (item.task) {
+        // Task list items: manually render checkbox + text, no numbering bullet
         runs.push(new TextRun({
           text: item.checked ? '\u2611 ' : '\u2610 ',
           font: 'Segoe UI Symbol',
           size: BODY_SIZE,
           color: COLORS.bullet
         }));
-      }
-
-      runs.push(...processInlineTokens(inlineTokens));
-
-      if (runs.length > 0) {
-        elements.push(new Paragraph({
-          numbering: { reference, level: Math.min(level, 2) },
-          spacing: { after: 60, line: 360 },
-          children: runs
-        }));
+        runs.push(...processInlineTokens(inlineTokens));
+        if (runs.length > 0) {
+          elements.push(new Paragraph({
+            spacing: { after: 60, line: 360 },
+            indent: { left: 360 * (level + 1), hanging: 360 },
+            children: runs
+          }));
+        }
+      } else {
+        runs.push(...processInlineTokens(inlineTokens));
+        if (runs.length > 0) {
+          elements.push(new Paragraph({
+            numbering: { reference, level: Math.min(level, 2) },
+            spacing: { after: 60, line: 360 },
+            children: runs
+          }));
+        }
       }
 
       for (const nl of nestedLists) {
